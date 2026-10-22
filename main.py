@@ -30,11 +30,12 @@ EXNESS_ACCOUNT_NUMBER = 81787095
 EXNESS_TRADING_PASSWORD = "BandaLucky1992@"  
 EXNESS_SERVER_NAME = "Exness-MT5Trial10"  
 
-# Global state memory vaults to lock technical parameters securely across loops
-LAST_MACRO_DIRECTION = "NONE"
-FROZEN_MACRO_ENTRY = 0.0
-FROZEN_MACRO_SL = 0.0
-FROZEN_MACRO_TP = 0.0
+# SUCCESS ISOLATED STATE VAULT: Completely isolates parameters per ticker to destroy target data cross-over!
+ASSET_STATE_VAULT = {
+    "XAUUSD": {"last_dir": "NONE", "entry": 0.0, "sl": 0.0, "tp": 0.0},
+    "GBPUSD": {"last_dir": "NONE", "entry": 0.0, "sl": 0.0, "tp": 0.0},
+    "US100":  {"last_dir": "NONE", "entry": 0.0, "sl": 0.0, "tp": 0.0}
+}
 
 # TRANSACTION LOCK VALVE: Prevents rapid duplicate order attempts during polling
 IS_TRANSACTION_LOCK_ENGAGED = False
@@ -106,9 +107,13 @@ def calculate_genuine_average_true_range(candles_json: list, period: int = 14) -
     return float(np.mean(true_ranges[-period:]))
 
 def compute_institutional_confluence(ticker: str, price: float, ema50: float, ema200: float, atr_val: float) -> dict:
-    """Surgically tracks macro trends and computes high-sensitivity counter-trend zones."""
-    global LAST_MACRO_DIRECTION, FROZEN_MACRO_ENTRY, FROZEN_MACRO_SL, FROZEN_MACRO_TP, IS_TRANSACTION_LOCK_ENGAGED
+    """Surgically tracks macro trends and calculates isolated mathematical targets for the specific chosen asset lane."""
+    global ASSET_STATE_VAULT, IS_TRANSACTION_LOCK_ENGAGED
     
+    clean_key = str(ticker).upper().replace(" (GOLD)", "").replace(" (CABLE)", "").replace(" (NASDAQ)", "").strip()
+    if clean_key not in ASSET_STATE_VAULT:
+        clean_key = "XAUUSD"
+        
     if not is_market_open_zambia_time():
         return {"direction": "MARKETS_CLOSED", "confluence_score": 0.0, "optimal_entry": 0.0, "stop_loss": 0.0, "take_profit": 0.0, "macro_status": "WEEKEND_HALT_ACTIVE"}
     
@@ -116,20 +121,24 @@ def compute_institutional_confluence(ticker: str, price: float, ema50: float, em
     sell_limit_ceiling = ema50 - (atr_val * 0.15)
     
     current_macro = "STRONG_BUY" if price > ema50 else "STRONG_SELL"
-    if current_macro != LAST_MACRO_DIRECTION:
-        LAST_MACRO_DIRECTION = current_macro
+    
+    # Target parameter extraction maps directly from the isolated asset vault lane coordinates
+    state = ASSET_STATE_VAULT[clean_key]
+    
+    if current_macro != state["last_dir"] or state["entry"] == 0.0:
+        state["last_dir"] = current_macro
         if current_macro == "STRONG_BUY":
-            FROZEN_MACRO_ENTRY = buy_limit_floor
-            FROZEN_MACRO_SL = FROZEN_MACRO_ENTRY - (atr_val * 2.2)
-            FROZEN_MACRO_TP = FROZEN_MACRO_ENTRY + (atr_val * 4.5)
+            state["entry"] = buy_limit_floor
+            state["sl"] = state["entry"] - (atr_val * 2.2)
+            state["tp"] = state["entry"] + (atr_val * 4.5)
         else:
-            FROZEN_MACRO_ENTRY = sell_limit_ceiling
-            FROZEN_MACRO_SL = FROZEN_MACRO_ENTRY + (atr_val * 2.2)
-            FROZEN_MACRO_TP = FROZEN_MACRO_ENTRY - (atr_val * 4.5)
+            state["entry"] = sell_limit_ceiling
+            state["sl"] = state["entry"] + (atr_val * 2.2)
+            state["tp"] = state["entry"] - (atr_val * 4.5)
             
-    target_entry = FROZEN_MACRO_ENTRY
-    target_sl = FROZEN_MACRO_SL
-    target_tp = FROZEN_MACRO_TP
+    target_entry = state["entry"]
+    target_sl = state["sl"]
+    target_tp = state["tp"]
 
     if not IS_TRANSACTION_LOCK_ENGAGED:
         if current_macro == "STRONG_BUY" and price <= (target_entry + (atr_val * 0.05)):
@@ -171,6 +180,7 @@ def compute_institutional_confluence(ticker: str, price: float, ema50: float, em
             "tp": round(pb_tp, 2)
         }
     }
+
 def dispatch_headless_cloud_order(ticker: str, direction: str, current_price: float, sl: float, tp: float, atr_val: float):
     """PHASE 4 HEADLESS ROUTER: Connects straight to the Exness institutional REST web gateway API."""
     global IS_TRANSACTION_LOCK_ENGAGED
