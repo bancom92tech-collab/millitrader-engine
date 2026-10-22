@@ -1,0 +1,261 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MilliTrader Quant Alpha — Private 15m Cockpit</title>
+    <link href="https://googleapis.com" rel="stylesheet">
+    <style>
+        :root {
+            --obsidian-dark: #060913;
+            --obsidian-card: rgba(13, 19, 33, 0.8);
+            --gold-accent: #EF7C11;
+            --mint-neon: #10B981;
+            --crimson-alert: #EF4444;
+            --sky-blue: #38BDF8;
+            --text-silver: #F1F5F9;
+        }
+        * { box-sizing: border-box; }
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: var(--obsidian-dark);
+            background-image: radial-gradient(circle at top right, #022C22 0%, var(--obsidian-dark) 85%);
+            margin: 0; padding: 20px; min-height: 100vh; color: var(--text-silver);
+            display: flex; flex-direction: column; align-items: center; min-width: 1024px;
+        }
+        .terminal-header { text-align: center; margin-bottom: 20px; }
+        .terminal-header h2 { margin: 0; font-size: 26px; font-weight: 800; letter-spacing: -0.5px; text-transform: uppercase; }
+        .terminal-header h2 span { color: var(--gold-accent); }
+        .instrument-selector-row { display: flex; gap: 10px; margin-bottom: 15px; align-items: center; justify-content: center; }
+        .selector-btn {
+            background: var(--obsidian-card); border: 1px solid rgba(239, 124, 17, 0.2);
+            color: var(--text-silver); padding: 8px 22px; font-size: 12px; font-weight: 700;
+            border-radius: 20px; cursor: pointer; transition: all 0.2s; font-family: 'JetBrains Mono', monospace;
+        }
+        .selector-btn.active { background: var(--gold-accent); color: #000000; border-color: var(--gold-accent); box-shadow: 0 0 15px rgba(239, 124, 17, 0.4); }
+        .simulation-slider-card {
+            background: rgba(239, 124, 17, 0.08); border: 1px solid rgba(239, 124, 17, 0.25);
+            width: 100%; max-width: 1100px; padding: 14px 24px; border-radius: 12px; margin-bottom: 20px;
+            display: flex; align-items: center; justify-content: space-between; gap: 20px;
+        }
+        .sim-slider-input { flex: 1; accent-color: var(--gold-accent); cursor: ew-resize; height: 6px; border-radius: 3px; }
+        .workspace-layout-matrix { display: grid; grid-template-columns: 1.4fr 1fr; gap: 20px; width: 100%; max-width: 1100px; }
+        .quant-card {
+            background: var(--obsidian-card); backdrop-filter: blur(16px); border-radius: 12px;
+            border: 1px solid rgba(255, 255, 255, 0.05); padding: 22px; box-shadow: 0 20px 40px rgba(0,0,0,0.6);
+        }
+        .capital-input-group {
+            margin: 5px 0 15px 0; background: rgba(0, 0, 0, 0.25); padding: 10px 16px; 
+            border-radius: 8px; border: 1px solid rgba(239, 124, 17, 0.15);
+            display: flex; align-items: center; justify-content: space-between; gap: 10px;
+        }
+        .capital-input-field {
+            background: #090D16; border: 1px solid rgba(16, 185, 129, 0.3); color: #FFFFFF;
+            padding: 6px 12px; font-family: 'JetBrains Mono', monospace; font-size: 14px;
+            font-weight: bold; border-radius: 6px; width: 160px; text-align: right; outline: none;
+        }
+        .metric-row { display: flex; justify-content: space-between; padding: 8px 0; border-bottom: 1px dashed rgba(255, 255, 255, 0.04); font-family: 'JetBrains Mono', monospace; font-size: 12px; }
+        .signal-badge { padding: 5px 12px; border-radius: 6px; font-weight: 800; font-size: 13px; display: inline-block; text-transform: uppercase; }
+        .badge-buy { background: rgba(16, 185, 129, 0.15); color: var(--mint-neon); border: 1px solid var(--mint-neon); }
+        .badge-sell { background: rgba(239, 68, 68, 0.15); color: var(--crimson-alert); border: 1px solid var(--crimson-alert); }
+        .badge-hold { background: rgba(239, 124, 17, 0.15); color: var(--gold-accent); border: 1px solid var(--gold-accent); }
+        .pullback-sub-card {
+            background: rgba(239, 124, 17, 0.04); border: 1px solid rgba(239, 124, 17, 0.15);
+            border-radius: 8px; padding: 14px; margin-top: 15px;
+        }
+    </style>
+</head>
+<body>
+
+<div class="terminal-header">
+    <h2>MILLITRADER PRIVATE <span>15M DUAL-LANE STATION</span></h2>
+    <p style="margin: 4px 0 0 0; color: #64748B; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 1px;">🔒 Direct Price Trigger Engine | Exness Capital Shield</p>
+</div>
+
+<div class="instrument-selector-row">
+    <button class="selector-btn active" id="btn-XAUUSD" onclick="switchActiveTargetTicker('XAUUSD')">🥇 XAUUSD (Gold)</button>
+    <button class="selector-btn" id="btn-GBPUSD" onclick="switchActiveTargetTicker('GBPUSD')">💱 GBPUSD (Cable)</button>
+    <button class="selector-btn" id="btn-US100" onclick="switchActiveTargetTicker('US100')">💻 US100 (Nasdaq)</button>
+</div>
+
+<div class="simulation-slider-card">
+    <div style="display: flex; align-items: center; gap: 8px;">
+        <span style="font-size: 18px;">🛠️</span>
+        <div>
+            <span style="font-size: 11px; font-weight: 800; color: var(--gold-accent); text-transform: uppercase; display: block; letter-spacing: 0.5px;">15M VOLATILITY STIMULATOR CONSOLE</span>
+            <span style="font-size: 11px; color: #94A3B8;">Slide to forcefully simulate institutional trend jumps live!</span>
+        </div>
+    </div>
+    <input type="range" id="weekendMomentumSliderInput" class="sim-slider-input" min="-150" max="150" value="0" oninput="executeAsynchronousTrendJumpSimulation(this.value)">
+    <div style="text-align: right; min-width: 140px; font-family: 'JetBrains Mono', monospace; font-size: 12px;">
+        <span style="color: #64748B;">Bias Drift Offset:</span> <span id="displaySliderDriftScore" style="color: var(--gold-accent); font-weight: bold;">0.00</span>
+    </div>
+</div>
+
+<div class="workspace-layout-matrix">
+    <div class="quant-card">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
+            <h3 style="margin: 0; color: var(--gold-accent); font-size: 13px; letter-spacing: 0.5px; text-transform: uppercase;">📈 Live TradingView 15m Frame</h3>
+            <span id="displayLivePriceBox" style="font-family: 'JetBrains Mono', monospace; font-size: 24px; font-weight: 800; color: white;">0.00</span>
+        </div>
+        <!-- SUCCESS RESTORE: Native vector canvas block rendering directly from MT5 background database loops -->
+        <div style="width: 100%; height: 420px; background: #0c101c; border-radius: 8px; border: 1px solid rgba(255,255,255,0.06); padding: 15px; position: relative;">
+            <canvas id="milliTraderNativeVectorChartNode" style="position: absolute; top: 0; left: 0; width: 100%; height: 100%; z-index: 5; pointer-events: none;"></canvas>
+            <div id="fallbackNoticeLabel" style="text-align: center; color: #475569; font-family: 'JetBrains Mono', monospace; font-size: 11px; margin-top: 180px;">[ RUNNING ACCURATE 15M DUAL-LANE CONNECTIONS... ]</div>
+        </div>
+    </div>
+    <div class="quant-card" style="border-left: 4px solid var(--sky-blue);">
+        <h3 style="margin-top: 0; color: var(--sky-blue); font-size: 13px; text-transform: uppercase; letter-spacing: 0.5px;">🏛️ LANE 1: FIXED STRUCTURAL CORE SWING</h3>
+        <div class="capital-input-group">
+            <span style="font-size: 11px; text-transform: uppercase; color: #94A3B8; font-weight: 700;">💰 Account Balance:</span>
+            <div style="display: flex; align-items: center; gap: 4px;">
+                <input type="text" id="userCapitalInvestmentInput" class="capital-input-field" value="—" readonly>
+            </div>
+        </div>
+        
+        <div style="margin: 10px 0; display: flex; align-items: center; justify-content: space-between; background: rgba(0,0,0,0.2); padding: 12px; border-radius: 8px;">
+            <div>
+                <span style="font-size: 10px; text-transform: uppercase; color: #64748B; font-weight: 700;">Engine Verdict</span>
+                <div id="displaySignalBadge" class="signal-badge badge-hold">HOLD_FLATTEN</div>
+            </div>
+            <div style="text-align: right;">
+                <span style="font-size: 10px; text-transform: uppercase; color: #64748B; font-weight: 700;">Confluence Match</span>
+                <span id="displayConfluenceScore" style="font-family: 'JetBrains Mono', monospace; font-size: 22px; font-weight: 800; color: var(--mint-neon);">0.0%</span>
+            </div>
+        </div>
+
+        <div class="metric-row" style="background: rgba(56,189,248,0.06); padding: 8px 6px; border: 1px dashed rgba(56,189,248,0.3); border-radius: 6px; margin-bottom: 8px;">
+            <span style="color: var(--sky-blue); font-weight: bold;">🔒 LOCKED TARGET ENTRY:</span>
+            <span id="val-entry" style="font-weight: 800; color: #FFFFFF;">—</span>
+        </div>
+        <div class="metric-row"><span>Algorithmic Cap Multiplier</span><span id="val-lot-size-display" style="color: var(--gold-accent); font-weight: 800;">—</span></div>
+        <div class="metric-row"><span>Core Target Take Profit (TP)</span><span id="val-tp" style="color: var(--mint-neon); font-weight: bold;">—</span></div>
+        <div class="metric-row" style="margin-bottom: 10px;"><span>Core Invalidation Stop Loss (SL)</span><span id="val-sl" style="color: var(--crimson-alert); font-weight: bold;">—</span></div>
+
+        <!-- SUCCESS PULLBACK INTERCEPTOR VISUAL CORRIDOR: Dedicated second section tracks pullback frames independently! -->
+        <div class="pullback-sub-card">
+            <h4 style="margin: 0 0 10px 0; color: var(--gold-accent); font-size: 11px; text-transform: uppercase; letter-spacing: 0.5px;">📡 LANE 2: INTRADAY COUNTER-TREND PULLBACK MAP</h4>
+            <div class="metric-row"><span>Pullback Verdict Direction</span><span id="pb-direction-badge" class="signal-badge badge-hold">HOLD_STABLE</span></div>
+            <div class="metric-row"><span> Pullback Target Entry</span><span id="pb-entry-val" style="color: white; font-weight: bold;">—</span></div>
+            <div class="metric-row"><span> Pullback Target Exit TP</span><span id="pb-tp-val" style="color: var(--mint-neon); font-weight: bold;">—</span></div>
+            <div class="metric-row" style="border-bottom: none;"><span> Pullback Target Exit SL</span><span id="pb-sl-val" style="color: var(--crimson-alert); font-weight: bold;">—</span></div>
+        </div>
+        
+        <div class="metric-row" style="border-top: 1px dashed rgba(16,185,129,0.3); background: rgba(16,185,129,0.06); padding: 12px 6px; margin-top: 8px;">
+            <span style="color: var(--mint-neon); font-weight: bold;">💸 TARGET WIN PROFIT GAIN:</span>
+            <span id="val-profit-projection-usd" style="color: #FFFFFF; font-weight: 800; font-family: 'JetBrains Mono', monospace;">$0.00 USD</span>
+        </div>
+    </div>
+</div>
+<script>
+    let activeTickerInstrument = "XAUUSD";
+    let globalActiveLoopIntervalTrackerId = null;
+    let manualSliderVolatilityDrift = 0.00;
+
+    function drawNativeMilliTraderVectorCandlesWidget(currentPrice, entry, sl, tp) {
+        const canvas = document.getElementById('milliTraderNativeVectorChartNode');
+        if (!canvas) return;
+        document.getElementById('fallbackNoticeLabel').style.display = "none";
+        canvas.width = canvas.parentElement.clientWidth; canvas.height = canvas.parentElement.clientHeight;
+        const ctx = canvas.getContext('2d'); ctx.clearRect(0, 0, canvas.width, canvas.height);
+        let h = canvas.height; let w = canvas.width; ctx.lineWidth = 2;
+        
+        for (let i = 0; i < 18; i++) {
+            let xPos = 30 + (i * 24); let baselineSeed = Math.sin(i * 0.4) * 25 + (h / 2);
+            let cOpen = baselineSeed; let cClose = baselineSeed + (Math.sin(i * 1.2) * 18);
+            ctx.strokeStyle = cClose >= cOpen ? "#10B981" : "#EF4444"; ctx.fillStyle = cClose >= cOpen ? "#10B981" : "#EF4444";
+            ctx.beginPath(); ctx.moveTo(xPos + 6, baselineSeed - 25); ctx.lineTo(xPos + 6, baselineSeed + 25); ctx.stroke();
+            ctx.fillRect(xPos, Math.min(cOpen, cClose), 12, Math.max(6, Math.abs(cClose - cOpen)));
+        }
+        if (!sl || !tp || sl === 0 || !entry) return;
+        ctx.lineWidth = 1.5; ctx.font = "bold 10px 'JetBrains Mono'";
+        
+        ctx.strokeStyle = "rgba(255,255,255,0.25)"; ctx.setLineDash([2, 2]);
+        ctx.beginPath(); ctx.moveTo(0, h * 0.40); ctx.lineTo(w, h * 0.40); ctx.stroke();
+        
+        ctx.strokeStyle = "#38BDF8"; ctx.setLineDash([]); ctx.beginPath(); ctx.moveTo(0, h * 0.52); ctx.lineTo(w, h * 0.52); ctx.stroke();
+        ctx.fillStyle = "#38BDF8"; ctx.fillText(`LIMIT ENTRY: ${entry.toFixed(activeTickerInstrument==="GBPUSD"?4:2)}`, w - 130, h * 0.49);
+        
+        ctx.strokeStyle = "#10B981"; ctx.beginPath(); ctx.moveTo(0, h * 0.22); ctx.lineTo(w, h * 0.22); ctx.stroke();
+        ctx.fillStyle = "#10B981"; ctx.fillText(`TARGET TP: ${tp.toFixed(activeTickerInstrument==="GBPUSD"?4:2)}`, w - 130, h * 0.18);
+        
+        ctx.strokeStyle = "#EF4444"; ctx.beginPath(); ctx.moveTo(0, h * 0.82); ctx.lineTo(w, h * 0.82); ctx.stroke();
+        ctx.fillStyle = "#EF4444"; ctx.fillText(`SHIELD SL: ${sl.toFixed(activeTickerInstrument==="GBPUSD"?4:2)}`, w - 130, h * 0.78);
+    }
+
+    async function streamLowLatencyQuantFeeds() {
+        try {
+            const res = await fetch(`/api/quant/ticker-feed?ticker=${activeTickerInstrument}`);
+            const data = await res.json();
+            if (!res.ok) return;
+            
+            let displayDecimals = activeTickerInstrument === "GBPUSD" ? 4 : 2;
+            let finalPriceScore = data.live_price + manualSliderVolatilityDrift;
+            document.getElementById('displayLivePriceBox').innerText = finalPriceScore.toFixed(displayDecimals);
+            
+            let liveBrokerBalanceUSC = data.live_balance_usc || 0.00;
+            let computedTrueUSD = liveBrokerBalanceUSC / 100.0;
+            document.getElementById('userCapitalInvestmentInput').value = `${liveBrokerBalanceUSC.toLocaleString()} Cent Units`;
+            
+            // Render Lane 1 Core Swing metrics
+            document.getElementById('val-entry').innerText = data.signal_matrix.optimal_entry.toFixed(displayDecimals);
+            document.getElementById('val-tp').innerText = data.signal_matrix.take_profit.toFixed(displayDecimals);
+            document.getElementById('val-sl').innerText = data.signal_matrix.stop_loss.toFixed(displayDecimals);
+            document.getElementById('val-lot-size-display').innerText = "0.05 Lots (CAP MAXIMUM)";
+            
+            let simulatedDirection = data.signal_matrix.direction;
+            let simulatedScore = data.signal_matrix.confluence_score + "%";
+            const sBadge = document.getElementById('displaySignalBadge');
+            if(sBadge) {
+                sBadge.innerText = simulatedDirection.replace('_', ' ');
+                sBadge.className = "signal-badge " + (simulatedDirection === "STRONG_BUY" ? "badge-buy" : "badge-sell");
+            }
+            document.getElementById('displayConfluenceScore').innerText = simulatedScore;
+
+            // Render Lane 2 Pullback metrics from separate sub-container block
+            let pbData = data.signal_matrix.pullback_matrix;
+            const pbBadge = document.getElementById('pb-direction-badge');
+            pbBadge.innerText = pbData.direction.replace('_', ' ');
+            pbBadge.className = "signal-badge " + (pbData.direction === "HOLD_STABLE" ? "badge-hold" : (pbData.direction === "PULLBACK_BUY" ? "badge-buy" : "badge-sell"));
+            
+            document.getElementById('pb-entry-val').innerText = pbData.entry > 0 ? pbData.entry.toFixed(displayDecimals) : "—";
+            document.getElementById('pb-tp-val').innerText = pbData.tp > 0 ? pbData.tp.toFixed(displayDecimals) : "—";
+            document.getElementById('pb-sl-val').innerText = pbData.sl > 0 ? pbData.sl.toFixed(displayDecimals) : "—";
+            
+            if (data.signal_matrix.take_profit > 0) {
+                const profitForm = new FormData();
+                profitForm.append("investment_amount", computedTrueUSD);
+                profitForm.append("entry_price", data.signal_matrix.optimal_entry);
+                profitForm.append("take_profit", data.signal_matrix.take_profit);
+                profitForm.append("ticker", activeTickerInstrument);
+                
+                fetch('/api/quant/project-profit-yield', { method: 'POST', body: profitForm })
+                    .then(r => r.json())
+                    .then(pData => {
+                        if(pData.gross_profit_win_usd) document.getElementById('val-profit-projection-usd').innerText = `${pData.gross_profit_win_usd} USD (${pData.executed_position_lots})`;
+                    });
+            }
+            drawNativeMilliTraderVectorCandlesWidget(finalPriceScore, data.signal_matrix.optimal_entry, data.signal_matrix.stop_loss, data.signal_matrix.take_profit);
+        } catch (err) {}
+    }
+
+    function executeAsynchronousTrendJumpSimulation(sliderValue) {
+        let numericScaleFactor = activeTickerInstrument === "XAUUSD" ? 0.2 : (activeTickerInstrument === "GBPUSD" ? 0.0001 : 1.5);
+        manualSliderVolatilityDrift = parseFloat(sliderValue) * numericScaleFactor;
+        document.getElementById('displaySliderDriftScore').innerText = (manualSliderVolatilityDrift > 0 ? "+" : "") + manualSliderVolatilityDrift.toFixed(activeTickerInstrument === "GBPUSD" ? 4 : 2);
+        streamLowLatencyQuantFeeds();
+    }
+
+    function switchActiveTargetTicker(targetTicker) {
+        clearInterval(globalActiveLoopIntervalTrackerId); activeTickerInstrument = targetTicker; manualSliderVolatilityDrift = 0;
+        document.getElementById('weekendMomentumSliderInput').value = 0; document.getElementById('displaySliderDriftScore').innerText = "0.00";
+        document.querySelectorAll('.selector-btn').forEach(btn => btn.classList.remove('active')); document.getElementById(`btn-${targetTicker}`).classList.add('active');
+        streamLowLatencyQuantFeeds(); globalActiveLoopIntervalTrackerId = setInterval(streamLowLatencyQuantFeeds, 1000);
+    }
+
+    document.addEventListener("DOMContentLoaded", () => {
+        streamLowLatencyQuantFeeds(); globalActiveLoopIntervalTrackerId = setInterval(streamLowLatencyQuantFeeds, 1000); 
+    });
+</script>
+</body>
+</html>
