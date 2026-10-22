@@ -88,7 +88,7 @@ def calculate_genuine_exponential_moving_average(close_prices: list, period: int
 def calculate_genuine_average_true_range(candles_json: list, period: int = 14) -> float:
     """Computes actual Institutional Average True Range volatility from live data spans."""
     if len(candles_json) < (period + 1):
-        return float(candles_json[-1] * 0.0035) if len(candles_json) > 0 else 10.0
+        return float(candles_json[-1][3] * 0.0035) if len(candles_json) > 0 else 10.0
     
     true_ranges = []
     for i in range(1, len(candles_json)):
@@ -190,7 +190,6 @@ def dispatch_headless_cloud_order(ticker: str, direction: str, current_price: fl
 def execute_institutional_trailing_profit_lock_production(current_live_price: float, entry_price: float, current_sl: float, direction: int, atr_val: float) -> float:
     """
     🔥 HIGH-PRECISION INSTITUTIONAL PROFIT PROTECTION GATEWAY
-    Surgically checks floating profit metrics against active ATR volatility bands.
     If the market moves 2.5x ATR into gain, it locks down 50% of the apex return instantly,
     completely destroying the risk of a winning trade collapsing back into a full loss!
     """
@@ -200,14 +199,14 @@ def execute_institutional_trailing_profit_lock_production(current_live_price: fl
     profit_activation_distance = atr_val * 2.5
     secured_profit_buffer = atr_val * 1.25
 
-    if direction == 0:  # ACTIVE BUY POSITION
+    if direction == 0:  
         floating_profit_points = current_live_price - entry_price
         if floating_profit_points >= profit_activation_distance:
             calculated_trailing_sl_floor = current_live_price - secured_profit_buffer
             if calculated_trailing_sl_floor > current_sl:
                 print(f"🟩 [TRAILING PROFIT SHIELD ACTIVE] -> Locked in profit floor line at: {calculated_trailing_sl_floor:.2f}")
                 return calculated_trailing_sl_floor
-    elif direction == 1:  # ACTIVE SELL POSITION
+    elif direction == 1:  
         floating_profit_points = entry_price - current_live_price
         if floating_profit_points >= profit_activation_distance:
             calculated_trailing_sl_ceiling = current_live_price + secured_profit_buffer
@@ -270,7 +269,6 @@ def get_live_quant_ticker_data(ticker: str):
 
     alpha = compute_institutional_confluence(clean_ticker_string, updated_p, current_ema_50, current_ema_200, computed_atr_points)
     
-    # Live execution shield tracker lock loop checks floating metrics continuously
     if clean_ticker_string == "XAUUSD":
         alpha["stop_loss"] = execute_institutional_trailing_profit_lock_production(
             updated_p, alpha["optimal_entry"], alpha["stop_loss"], 0 if updated_p > current_ema_50 else 1, computed_atr_points
@@ -304,9 +302,13 @@ def calculate_target_payout_yield_projection(
     final_win = (pips * pip_val * executed_lot) / (100.0 if is_cent_account else 1.0)
     return {"gross_profit_win_usd": f"${final_win:.2f} USD", "executed_position_lots": f"{executed_lot:.2f} Lots"}
 
+# SUCCESS RESOLVED: Enforces dynamic absolute directory path lookup to locate index.html flawlessly inside Linux containers!
 @app.get("/", response_class=HTMLResponse)
 def serve_quant_terminal_gate():
-    with open("index.html", "r", encoding="utf-8") as file: return file.read()
+    root_directory_path = os.path.dirname(os.path.abspath(__file__))
+    html_file_absolute_path = os.path.join(root_directory_path, "index.html")
+    with open(html_file_absolute_path, "r", encoding="utf-8") as file: 
+        return file.read()
 
 if __name__ == "__main__":
     import uvicorn
