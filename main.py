@@ -30,11 +30,18 @@ EXNESS_ACCOUNT_NUMBER = 81787095
 EXNESS_TRADING_PASSWORD = "BandaLucky1992@"  
 EXNESS_SERVER_NAME = "Exness-MT5Trial10"  
 
-# SUCCESS ISOLATED STATE VAULT: Completely isolates parameters per ticker to destroy target data cross-over!
+# ASSET STATE VAULT: Completely isolates parameters per ticker to destroy data cross-over
 ASSET_STATE_VAULT = {
     "XAUUSD": {"last_dir": "NONE", "entry": 0.0, "sl": 0.0, "tp": 0.0},
     "GBPUSD": {"last_dir": "NONE", "entry": 0.0, "sl": 0.0, "tp": 0.0},
     "US100":  {"last_dir": "NONE", "entry": 0.0, "sl": 0.0, "tp": 0.0}
+}
+
+# SPREAD CONTROL THRESHOLDS: Strict upper limits allowed for order execution to prevent news slippage
+MAX_ALLOWED_SPREADS = {
+    "XAUUSD": 0.35,   # Maximum allowed Gold spread points ($0.35 spread)
+    "GBPUSD": 0.0004, # Maximum allowed Cable spread points (4 pips)
+    "US100":  8.00    # Maximum allowed Nasdaq spread points
 }
 
 # TRANSACTION LOCK VALVE: Prevents rapid duplicate order attempts during polling
@@ -81,7 +88,7 @@ def calculate_genuine_exponential_moving_average(close_prices: list, period: int
     if len(close_prices) < period:
         return float(close_prices[-1]) if close_prices else 0.0
     alpha = 2.0 / (period + 1.0)
-    ema = float(close_prices[0])
+    ema = float(close_prices)
     for price in close_prices[1:]:
         ema = (float(price) * alpha) + (ema * (1.0 - alpha))
     return ema
@@ -89,13 +96,13 @@ def calculate_genuine_exponential_moving_average(close_prices: list, period: int
 def calculate_genuine_average_true_range(candles_json: list, period: int = 14) -> float:
     """Computes actual Institutional Average True Range volatility from live data spans."""
     if len(candles_json) < (period + 1):
-        return float(candles_json[-1][3] * 0.0035) if len(candles_json) > 0 else 10.0
+        return float(candles_json[-1] * 0.0035) if len(candles_json) > 0 else 10.0
     
     true_ranges = []
     for i in range(1, len(candles_json)):
-        high = float(candles_json[i][1])  
-        low = float(candles_json[i][2])   
-        prev_close = float(candles_json[i-1][3]) 
+        high = float(candles_json[i])  
+        low = float(candles_json[i])   
+        prev_close = float(candles_json[i-1]) 
         
         tr = max(
             high - low,
@@ -106,9 +113,9 @@ def calculate_genuine_average_true_range(candles_json: list, period: int = 14) -
         
     return float(np.mean(true_ranges[-period:]))
 
-def compute_institutional_confluence(ticker: str, price: float, ema50: float, ema200: float, atr_val: float) -> dict:
-    """Surgically tracks macro trends and calculates isolated mathematical targets for the specific chosen asset lane."""
-    global ASSET_STATE_VAULT, IS_TRANSACTION_LOCK_ENGAGED
+def compute_institutional_confluence(ticker: str, price: float, ema50: float, ema200: float, atr_val: float, current_spread: float) -> dict:
+    """Surgically tracks macro trends with automated high-spread news trigger locks."""
+    global ASSET_STATE_VAULT, MAX_ALLOWED_SPREADS, IS_TRANSACTION_LOCK_ENGAGED
     
     clean_key = str(ticker).upper().replace(" (GOLD)", "").replace(" (CABLE)", "").replace(" (NASDAQ)", "").strip()
     if clean_key not in ASSET_STATE_VAULT:
@@ -117,12 +124,14 @@ def compute_institutional_confluence(ticker: str, price: float, ema50: float, em
     if not is_market_open_zambia_time():
         return {"direction": "MARKETS_CLOSED", "confluence_score": 0.0, "optimal_entry": 0.0, "stop_loss": 0.0, "take_profit": 0.0, "macro_status": "WEEKEND_HALT_ACTIVE"}
     
+    # SPREAD SHIELD EVALUATION PASS: Detect news events instantly before evaluating price lines
+    spread_limit_threshold = MAX_ALLOWED_SPREADS.get(clean_key, 0.50)
+    is_spread_blown_out = current_spread > spread_limit_threshold
+    
     buy_limit_floor = ema50 + (atr_val * 0.15)
     sell_limit_ceiling = ema50 - (atr_val * 0.15)
     
     current_macro = "STRONG_BUY" if price > ema50 else "STRONG_SELL"
-    
-    # Target parameter extraction maps directly from the isolated asset vault lane coordinates
     state = ASSET_STATE_VAULT[clean_key]
     
     if current_macro != state["last_dir"] or state["entry"] == 0.0:
@@ -140,13 +149,18 @@ def compute_institutional_confluence(ticker: str, price: float, ema50: float, em
     target_sl = state["sl"]
     target_tp = state["tp"]
 
-    if not IS_TRANSACTION_LOCK_ENGAGED:
-        if current_macro == "STRONG_BUY" and price <= (target_entry + (atr_val * 0.05)):
-            IS_TRANSACTION_LOCK_ENGAGED = True  
-            dispatch_headless_cloud_order(ticker, "BUY", price, target_sl, target_tp, atr_val)
-        elif current_macro == "STRONG_SELL" and price >= (target_entry - (atr_val * 0.05)):
-            IS_TRANSACTION_LOCK_ENGAGED = True
-            dispatch_headless_cloud_order(ticker, "SELL", price, target_sl, target_tp, atr_val)
+    # SPREAD LOCK GATING ENFORCEMENT: If spreads are high, force trigger systems offline!
+    if is_spread_blown_out:
+        macro_status_label = f"SPREAD_VIOLATION_LOCK (Current: {current_spread:.4f} | Max: {spread_limit_threshold:.4f})"
+    else:
+        macro_status_label = "LIQUIDITY_PRISTINE_ARMED"
+        if not IS_TRANSACTION_LOCK_ENGAGED:
+            if current_macro == "STRONG_BUY" and price <= (target_entry + (atr_val * 0.05)):
+                IS_TRANSACTION_LOCK_ENGAGED = True  
+                dispatch_headless_cloud_order(ticker, "BUY", price, target_sl, target_tp, atr_val)
+            elif current_macro == "STRONG_SELL" and price >= (target_entry - (atr_val * 0.05)):
+                IS_TRANSACTION_LOCK_ENGAGED = True
+                dispatch_headless_cloud_order(ticker, "SELL", price, target_sl, target_tp, atr_val)
 
     if current_macro == "STRONG_BUY":
         if price > (target_entry + (atr_val * 0.25)):
@@ -168,19 +182,19 @@ def compute_institutional_confluence(ticker: str, price: float, ema50: float, em
             pb_entry, pb_sl, pb_tp = target_entry, target_sl, target_tp
         
     return {
-        "direction": current_macro,
-        "confluence_score": 85.0,
+        "direction": current_macro if not is_spread_blown_out else "HOLD_LOCK",
+        "confluence_score": 85.0 if not is_spread_blown_out else 0.0,
         "optimal_entry": round(target_entry, 2),
         "stop_loss": round(target_sl, 2),
         "take_profit": round(target_tp, 2),
+        "macro_status": macro_status_label,
         "pullback_matrix": {
-            "direction": pb_dir,
+            "direction": pb_dir if not is_spread_blown_out else "STANDBY_UNTIL_NEWS_PASSES",
             "entry": round(pb_entry, 2),
             "sl": round(pb_sl, 2),
             "tp": round(pb_tp, 2)
         }
     }
-
 def dispatch_headless_cloud_order(ticker: str, direction: str, current_price: float, sl: float, tp: float, atr_val: float):
     """PHASE 4 HEADLESS ROUTER: Connects straight to the Exness institutional REST web gateway API."""
     global IS_TRANSACTION_LOCK_ENGAGED
@@ -243,6 +257,9 @@ def get_live_quant_ticker_data(ticker: str):
     current_ema_200 = updated_p * 0.972
     computed_atr_points = updated_p * 0.0035
     
+    # Baseline normal floating spread simulated factor
+    floating_market_spread = random.uniform(0.12, 0.22) if "XAU" in clean_ticker_string else (random.uniform(0.0001, 0.0002) if "GBP" in clean_ticker_string else random.uniform(1.50, 3.50))
+    
     try:
         if "XAU" in clean_ticker_string: url_target = "https://yahoo.com"
         elif "US100" in clean_ticker_string: url_target = "https://yahoo.com"
@@ -251,14 +268,19 @@ def get_live_quant_ticker_data(ticker: str):
         req_headers = urllib.request.Request(url_target, headers={'User-Agent': 'Mozilla/5.0'})
         with urllib.request.urlopen(req_headers, timeout=3) as net_stream:
             json_payload = json.loads(net_stream.read().decode())
-            chart_data = json_payload["chart"]["result"][0]
+            chart_data = json_payload["chart"]["result"]
             
             live_price_extracted = chart_data["meta"]["regularMarketPrice"]
             if live_price_extracted and live_price_extracted > 0:
                 updated_p = float(live_price_extracted)
                 
+            # SPREAD SHIELD INGESTION EXTRACTION: Compute the real live spread distance from current market liquidity
+            meta_block = chart_data["meta"]
+            if "ask" in meta_block and "bid" in meta_block:
+                floating_market_spread = abs(float(meta_block["ask"]) - float(meta_block["bid"]))
+                
             timestamps = chart_data["timestamp"]
-            indicators_raw = chart_data["indicators"]["quote"][0]
+            indicators_raw = chart_data["indicators"]["quote"]
             close_prices_array = [float(p) for price in indicators_raw["close"] if (p := price) is not None]
             
             candles_matrix = []
@@ -277,7 +299,7 @@ def get_live_quant_ticker_data(ticker: str):
     except Exception:
         if row_cache: updated_p = row_cache["current_price"] + random.uniform(-0.02, 0.02)
 
-    alpha = compute_institutional_confluence(clean_ticker_string, updated_p, current_ema_50, current_ema_200, computed_atr_points)
+    alpha = compute_institutional_confluence(clean_ticker_string, updated_p, current_ema_50, current_ema_200, computed_atr_points, floating_market_spread)
     
     if clean_ticker_string == "XAUUSD":
         alpha["stop_loss"] = execute_institutional_trailing_profit_lock_production(
@@ -312,13 +334,11 @@ def calculate_target_payout_yield_projection(
     final_win = (pips * pip_val * executed_lot) / (100.0 if is_cent_account else 1.0)
     return {"gross_profit_win_usd": f"${final_win:.2f} USD", "executed_position_lots": f"{executed_lot:.2f} Lots"}
 
-# SUCCESS RESOLVED: Enforces dynamic absolute directory path lookup to locate index.html flawlessly inside Linux containers!
 @app.get("/", response_class=HTMLResponse)
 def serve_quant_terminal_gate():
     root_directory_path = os.path.dirname(os.path.abspath(__file__))
     html_file_absolute_path = os.path.join(root_directory_path, "index.html")
-    with open(html_file_absolute_path, "r", encoding="utf-8") as file: 
-        return file.read()
+    with open(html_file_absolute_path, "r", encoding="utf-8") as file: return file.read()
 
 if __name__ == "__main__":
     import uvicorn
